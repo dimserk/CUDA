@@ -13,7 +13,6 @@ __global__ void g_buble_sort(int *array, int* array_len, int* iter_num)
 
     while(true)
     {
-
         if(i * 2 == *iter_num)
         {
             work = true;
