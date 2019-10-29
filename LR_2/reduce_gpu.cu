@@ -17,47 +17,72 @@ __global__ void kernel(int *array, int *i)
 
 int main(int argc, char** argv)
 {
-    int array_size, start, stop;
+    int real_array_size = 512, start = 0, stop = 100;
     
     //Obtaining command line arguments
     switch (argc)
     {
     case 1:
-        array_size = 512;
-        cout << "Default array size: " << array_size << endl;
-        start = 0;
-        cout << "Default random start: " << start << endl;
-        stop = 100;
-        cout << "Default random stop: " << stop << endl;
+        cout << " #Warning# Default array size: " << real_array_size << endl;
+        cout << " #Warning# Default random start: " << start << endl;
+        cout << " #Warning# Default random stop: " << stop << endl;
         break;
     case 2:
-        array_size = atoi(argv[1]);
-        start = 0;
-        cout << "Default random start: " << start << endl;
-        stop = 100;
-        cout << "Default random stop: " << stop << endl;
+        real_array_size = atoi(argv[1]);
+        cout << " #Warning# Default random start: " << start << endl;
+        cout << " #Warning# Default random stop: " << stop << endl;
         break;
     case 4:
-        array_size = atoi(argv[1]);
+        real_array_size = atoi(argv[1]);
         start = atoi(argv[2]);
         stop = atoi(argv[3]);
         break;   
     default:
-        cout << "Wrong input!" << endl;
+        cout << " #Error# Wrong input! Default settings applied." << endl;
+        cout << " #Warning# Default array size: " << real_array_size << endl;
+        cout << " #Warning# Default random start: " << start << endl;
+        cout << " #Warning# Default random stop: " << stop << endl;
+    }
+    cout << endl;
+
+    if(real_array_size < 2)
+    {
+        cout << " #Error# Array size is too small, at least 2!" << endl;
+        return 0 ;
     }
 
+    //Every array size can be used!
+    int tmp_size, array_size, degree = 1;
+    while(true)
+    {
+        tmp_size = pow(2, degree);
+        if(real_array_size <= tmp_size)
+        {
+            array_size = tmp_size;
+            break;
+        } 
+
+        degree++;
+    }
     int *array = new int[array_size];
 
     //Randomazing array
     srand(time(NULL));
-    for (int i = 0; i < array_size; i++)
+    for(int i = 0; i < array_size; i++)
     {
-        array[i] = start + rand() % stop;
+        if(i <= real_array_size - 1)
+        {
+            array[i] = start + rand() % stop;
+        }
+        else
+        {
+            array[i] = 0;
+        }
     }
-    
+
     //Control summation
     int cpu_sum = 0;
-    for(int i = 0; i < array_size; i++)
+    for(int i = 0; i < real_array_size; i++)
     {
         cpu_sum += array[i];
     }
@@ -92,7 +117,7 @@ int main(int argc, char** argv)
         cudaError_t cuda_status = cudaGetLastError();
         if(cuda_status != cudaSuccess)
         {
-            cout << "Kernel error!" << endl;
+            cout << " #Error# Kernel error!" << endl;
             goto cuda_error;
         }
     }
@@ -105,17 +130,18 @@ int main(int argc, char** argv)
     cudaEventElapsedTime(&working_time, e_start, e_stop);
 
     //Printing result
-    cout << "Summation time: " << working_time << " ms" << endl;
-    cout << "Total sum of the array: " << array[array_size - 1] << " (GPU)" << endl;
-    cout << "Total sum of the array: " << cpu_sum << " (CPU)" << endl;
+    cout << " GPU summation time: " << working_time << " ms" << endl;
+    cout << " Total sum of the array: " << array[array_size - 1] << " (GPU)" << endl;
+    cout << " Total sum of the array: " << cpu_sum << " (CPU)" << endl;
 
-    cuda_error:
+cuda_error:
     delete[] array;
 
     cudaFree(d_array);
     cudaFree(d_i);
 
-    cudaDeviceReset();
+    cudaEventDestroy(e_start);
+    cudaEventDestroy(e_stop);
 
     return 0;
 }

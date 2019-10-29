@@ -57,38 +57,39 @@ void array_print(int* array, int array_len, const char* message)
 
 int main(int argc, char** argv)
 {
-    int array_len, start, stop;
+    int array_len = 15, start = 0, stop = 101;
     
     //Obtaining command line arguments
     switch (argc)
     {
     case 1:
-        array_len = 15;
         cout << " #Warning# Default array size: " << array_len << endl;
-        start = 0;
         cout << " #Warning# Default random start: " << start << endl;
-        stop = 100;
         cout << " #Warning# Default random stop: " << stop << endl;
-        cout << endl;
         break;
     case 2:
         array_len = atoi(argv[1]);
-        start = 0;
         cout << " #Warning# Default random start: " << start << endl;
-        stop = 100;
         cout << " #Warning# Default random stop: " << stop << endl;
-        cout << endl;
         break;
     case 4:
         array_len = atoi(argv[1]);
         start = atoi(argv[2]);
         stop = atoi(argv[3]);
-        cout << endl;
         break;   
     default:
-        cout << "Wrong input!" << endl;
+        cout << " #Error# Wrong input! Default settings applied." << endl;
+        cout << " #Warning# Default array size: " << array_len << endl;
+        cout << " #Warning# Default random start: " << start << endl;
+        cout << " #Warning# Default random stop: " << stop << endl;
     }
+    cout << endl;
 
+    if(array_len < 2)
+    {
+        cout << " #Error# Array length is too small, at least 2!" << endl;
+        return 0;
+    }
     int *init_array = new int[array_len];
 
     //Randomizing array
@@ -119,16 +120,16 @@ int main(int argc, char** argv)
             max_discharge++;
             discharge_factor *= 10;
         }
-        else
+        else 
         {
             break;
         }
     }
 
-    //radix_sort wip
+    //CPU radix sort
     cpu_radix_sort(init_array, array_len, max_discharge);
 
-    array_print(init_array, array_len, "After cpu sort");
+    array_print(init_array, array_len, "After CPU sort");
 
     return 0;
 }
