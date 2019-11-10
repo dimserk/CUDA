@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <list>
 #include <ctime>
+#include <fstream>
 #include "cuda_runtime.h"
 
 using namespace std;
@@ -100,14 +101,19 @@ int main(int argc, char** argv) {
     cout << endl;
 
     if(array_len < 2) {
-        cout << " #Error# Array length is too small, at least 2!" << endl;
+        cout << " #Error# Array length is too small. at least 2!" << endl;
         return 0;
     }
+
     int *init_array = new int[array_len];
     int *gpu_array = new int[array_len];
 
     int max_number = 0;
     int max_discharge = 0, discharge_factor = 1;
+
+    clock_t c_start, c_end;
+
+    ofstream file_out("res.csv", ios_base::app);
 
     //Randomizing array
     srand(time(NULL));
@@ -121,6 +127,13 @@ int main(int argc, char** argv) {
 
     //GPU radix sort
     int *d_array, *d_tmp_array, *d_b_array, *d_s_array, *d_array_len;
+    float working_time;
+    double gpu_time, cpu_time;
+
+    cudaEvent_t e_start, e_stop;
+
+    cudaEventCreate(&e_start);
+    cudaEventCreate(&e_stop);
 
     cudaMalloc((void**)&d_array, sizeof(int) * array_len);
     cudaMalloc((void**)&d_tmp_array, sizeof(int) * array_len);
@@ -131,6 +144,7 @@ int main(int argc, char** argv) {
     cudaMemcpy(d_array, init_array, sizeof(int) * array_len, cudaMemcpyHostToDevice);
     cudaMemcpy(d_array_len, &array_len, sizeof(int), cudaMemcpyHostToDevice);
 
+    cudaEventRecord(e_start);
     gpu_radix_sort<<<1, array_len>>>(d_array, d_tmp_array, d_b_array, d_s_array, d_array_len);
     cudaError_t cuda_status = cudaGetLastError();
     if(cuda_status != cudaSuccess) {
@@ -138,11 +152,19 @@ int main(int argc, char** argv) {
         goto cuda_error;
     }
 
+    cudaDeviceSynchronize();
+
+    cudaEventRecord(e_stop);
+    cudaEventSynchronize(e_stop);
+    cudaEventElapsedTime(&working_time, e_start, e_stop);
+
     cudaMemcpy(gpu_array, d_array, sizeof(int) * array_len, cudaMemcpyDeviceToHost);
 
     if(array_len < PRINTING_LIMIT) {
         array_print(gpu_array, array_len, "After GPU sort");
     }
+    gpu_time = working_time / 1000;
+    cout << " GPU sorting time: " << gpu_time << " s" << endl;
 
     //CPU radix sort
 
@@ -164,15 +186,26 @@ int main(int argc, char** argv) {
         }
     }
 
+    c_start = clock();
     cpu_radix_sort(init_array, array_len, max_discharge);
+    c_end = clock();
 
     if(array_len < PRINTING_LIMIT) {
         array_print(init_array, array_len, "After CPU sort");
     }
+    cpu_time = (double)(c_end - c_start) / CLOCKS_PER_SEC;
+    cout << " CPU sorting time: " << cpu_time << " s" << endl;
+
+    file_out << array_len << ';' << gpu_time << ';' << cpu_time << ';' << endl;
 
 cuda_error:
+    file_out.close();
+
     delete[] init_array;
     delete[] gpu_array;
+
+    cudaEventDestroy(e_start);
+    cudaEventDestroy(e_stop);
 
     cudaFree(d_array);
     cudaFree(d_tmp_array);

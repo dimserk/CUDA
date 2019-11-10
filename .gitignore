@@ -7,4 +7,5 @@
 *.exe
 *.lib
 *.exp
+*.csv
 .vscode
