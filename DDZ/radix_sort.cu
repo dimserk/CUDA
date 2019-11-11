@@ -146,15 +146,16 @@ int main(int argc, char** argv) {
 
     cudaEventRecord(e_start);
     gpu_radix_sort<<<1, array_len>>>(d_array, d_tmp_array, d_b_array, d_s_array, d_array_len);
+    cudaEventRecord(e_stop);
+
     cudaError_t cuda_status = cudaGetLastError();
     if(cuda_status != cudaSuccess) {
-        cout << "Kernel error!" << endl;
+        cout << " #Error# CUDA kernel error!" << endl;
         goto cuda_error;
     }
 
     cudaDeviceSynchronize();
 
-    cudaEventRecord(e_stop);
     cudaEventSynchronize(e_stop);
     cudaEventElapsedTime(&working_time, e_start, e_stop);
 

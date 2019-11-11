@@ -1,3 +1,3 @@
-for ($i = 1000; $i -lt 250000; $i+=1000) {
+for ($i = 24; $i -lt 1024; $i+= 10) {
     .\radix_sort.exe $i
 }
