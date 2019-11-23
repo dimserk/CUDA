@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
     //Randomizing array
     srand(time(NULL));
     for (int i = 0; i < array_len; i++) {
-        init_array[i] = start + rand() % stop;
+        init_array[i] = start + rand() % (stop - 10);
     }
 
     if(array_len < PRINTING_LIMIT) {
@@ -221,8 +221,13 @@ int main(int argc, char** argv) {
     cout << " GPU sorting time: " << gpu_time << " s" << endl;
     
     cpu_merge_time = (double)(c_end - c_start) / CLOCKS_PER_SEC;
-    cout << " Merging time: " << cpu_merge_time << " s" << endl;
-
+    cout << " Merging time: ";
+    if (cpu_merge_time == 0) {
+        cout << "less then 0.001 s" << endl;
+    }
+    else {
+        cout << cpu_merge_time << " s" << endl;
+    }
 
     //CPU radix sort
     c_start = clock();
@@ -234,7 +239,13 @@ int main(int argc, char** argv) {
     }
 
     cpu_time = (double)(c_end - c_start) / CLOCKS_PER_SEC;
-    cout << " CPU sorting time: " << cpu_time << " s" << endl;
+    cout << " CPU sorting time: ";
+    if (cpu_merge_time == 0) {
+        cout << "less then 0.001 s" << endl;
+    }
+    else {
+        cout << cpu_time << " s" << endl;
+    }
 
     //logging
     file_out << array_len << ';' << gpu_time << ';' << cpu_merge_time << ';' << cpu_time << ';' << endl;
