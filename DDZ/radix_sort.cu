@@ -1,66 +1,107 @@
 #include <iostream>
-#include <cstdlib>
-#include <list>
-#include <ctime>
 #include <fstream>
+#include <cstdlib>
+#include <ctime>
 #include "cuda_runtime.h"
 
 using namespace std;
 
-__global__ void gpu_radix_sort(int* array, int *tmp_array, int *b_array, int* s_array, int *array_len)
-{
-    int id = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void fast_radix_sort(int *array, int array_len) {
+    extern __shared__ int tmp_array[];
+    int *b_array = tmp_array + array_len;
+    int *s_array = tmp_array + array_len * 2;
+    int *t_array = tmp_array + array_len * 3;
 
-    for (int k = 0; k < 32; k++) {
-        b_array[id] = (array[id] >> k) & 1;
+    tmp_array[threadIdx.x] = array[threadIdx.x + array_len * blockIdx.x];
+
+    __syncthreads();
+
+    for(int i = 0; i < sizeof(int) * 8; i++) {
+        b_array[threadIdx.x] = (tmp_array[threadIdx.x] >> i) & 1;
 
         __syncthreads();
-        if(id == 0) {
+        if (threadIdx.x == 0) {
             s_array[0] = 0;
-            for (int i = 1; i < *array_len + 1; i++) {
+            for (int i = 1; i < array_len + 1; i++) {
                 s_array[i] = s_array[i - 1] + b_array[i - 1];
             }
         }
         __syncthreads();
 
-        if (b_array[id] == 0) {
-            tmp_array[id - s_array[id]] = array[id];
+        if (b_array[threadIdx.x] == 0) {
+            t_array[threadIdx.x - s_array[threadIdx.x]] = tmp_array[threadIdx.x];
         }
         else {
-            tmp_array[s_array[id] + (*array_len - s_array[*array_len])] = array[id];
+            t_array[s_array[threadIdx.x] + (array_len - s_array[array_len])] = tmp_array[threadIdx.x];
         }
 
         __syncthreads();
-        array[id] = tmp_array[id];
+        tmp_array[threadIdx.x] = t_array[threadIdx.x];
         __syncthreads();
-
     }
+
+    __syncthreads();
+    array[threadIdx.x + array_len * blockIdx.x] = tmp_array[threadIdx.x];    
 }
 
-void cpu_radix_sort(int* array, int array_len, int discharge) {
-    auto *tmp_lists = new list<int>[10];
-    int factor = 10;
+void merge(int *array1, int *array2, int array1_len, int array2_len) {
+	int i = 0, j = 0, total_array_len = array1_len + array2_len;
+	int *new_array = new int[total_array_len];
 
-    for (int d = 0; d < discharge; d++) {
-        for(int i = 0; i < array_len; i++) {
-            int j = array[i] % factor / (factor / 10);
-            tmp_lists[j].push_back(array[i]);
-        }
+	for (int k = 0; k < total_array_len; k++) {
+		if (i == array1_len) {
+			new_array[k] = array2[j++];
+		}
+		else if (j == array2_len) {
+			new_array[k] = array1[i++];
+		}
+		else if (array1[i] < array2[j]) {
+			new_array[k] = array1[i++];
+		}
+		else {
+			new_array[k] = array2[j++];
+		}
+	}
 
-        int init_ind = 0;
-        for(int i = 0; i < 10; i++) {
-            if(!tmp_lists[i].empty()) {
-                int size = tmp_lists[i].size();
-                for(int j = 0; j < size; j++) {
-                    array[init_ind] = tmp_lists[i].front();
-                    init_ind++;
-                    tmp_lists[i].pop_front();
-                } 
-            }
-        }
+	memcpy(array1, new_array, sizeof(int) * total_array_len);
+	delete[] new_array;
+}
 
-        factor *= 10;
-    }
+void cpu_radix_sort(int* array, int array_len) {
+	bool *b_array = new bool[array_len];
+	int *s_array = new int[array_len + 1];
+	int *tmp_array = new int[array_len];
+
+	int j;
+
+	for (int k = 0; k < sizeof(int) * 8; k++) {
+		for (int i = 0; i < array_len; i++) {
+			b_array[i] = (array[i] >> k) & 1;
+		}
+
+		s_array[0] = 0;
+		for (int i = 1; i < array_len + 1; i++) {
+			s_array[i] = s_array[i - 1] + b_array[i - 1];
+		}
+
+		for (int i = 0; i < array_len; i++) {
+			if (b_array[i] == 0) {
+				tmp_array[i - s_array[i]] = array[i];
+			}
+			else {
+				j = s_array[i] + (array_len - s_array[array_len]);
+				tmp_array[j] = array[i];
+			}
+		}
+
+		for (int i = 0; i < array_len; i++) {
+			array[i] = tmp_array[i];
+		}
+	};
+
+	delete[] b_array;
+	delete[] s_array;
+	delete[] tmp_array;
 }
 
 void array_print(int* array, int array_len, const char* message) {
@@ -72,8 +113,8 @@ void array_print(int* array, int array_len, const char* message) {
 }
 
 int main(int argc, char** argv) {
-    int const PRINTING_LIMIT = 26;
-    int array_len = 15, start = 0, stop = 101;
+    int const PRINTING_LIMIT = 101;
+    int array_len = 50, start = 0, stop = 101;
     
     //Obtaining command line arguments
     switch (argc) {
@@ -108,9 +149,6 @@ int main(int argc, char** argv) {
     int *init_array = new int[array_len];
     int *gpu_array = new int[array_len];
 
-    int max_number = 0;
-    int max_discharge = 0, discharge_factor = 1;
-
     clock_t c_start, c_end;
 
     ofstream file_out("res.csv", ios_base::app);
@@ -126,29 +164,35 @@ int main(int argc, char** argv) {
     }
 
     //GPU radix sort
-    int *d_array, *d_tmp_array, *d_b_array, *d_s_array, *d_array_len;
+    int *d_array;
     float working_time;
-    double gpu_time, cpu_time;
+    double gpu_time, cpu_time, cpu_merge_time; 
+    int block_num, thread_num, subarray_len;
+
+    // Splitting data to blocks
+    for (int f = 1024; f > 0; f--) {
+        if (array_len % f == 0) {
+            block_num = array_len / f;
+            thread_num = subarray_len = f;
+            break;
+        }
+    }
 
     cudaEvent_t e_start, e_stop;
+    cudaError_t cuda_status;
 
     cudaEventCreate(&e_start);
     cudaEventCreate(&e_stop);
 
     cudaMalloc((void**)&d_array, sizeof(int) * array_len);
-    cudaMalloc((void**)&d_tmp_array, sizeof(int) * array_len);
-    cudaMalloc((void**)&d_b_array, sizeof(int) * array_len);
-    cudaMalloc((void**)&d_s_array, sizeof(int) * (array_len + 1));
-    cudaMalloc((void**)&d_array_len, sizeof(int));
 
     cudaMemcpy(d_array, init_array, sizeof(int) * array_len, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_array_len, &array_len, sizeof(int), cudaMemcpyHostToDevice);
 
     cudaEventRecord(e_start);
-    gpu_radix_sort<<<1, array_len>>>(d_array, d_tmp_array, d_b_array, d_s_array, d_array_len);
+    fast_radix_sort<<<block_num, thread_num, (subarray_len * sizeof(int)) * 4>>>(d_array, subarray_len);
     cudaEventRecord(e_stop);
 
-    cudaError_t cuda_status = cudaGetLastError();
+    cuda_status = cudaGetLastError();
     if(cuda_status != cudaSuccess) {
         cout << " #Error# CUDA kernel error!" << endl;
         goto cuda_error;
@@ -161,43 +205,39 @@ int main(int argc, char** argv) {
 
     cudaMemcpy(gpu_array, d_array, sizeof(int) * array_len, cudaMemcpyDeviceToHost);
 
+    //Merging sorted parts of array
+    c_start = clock();
+    for (int i = 0; i < block_num - 1; i++) {
+        merge(gpu_array, gpu_array + subarray_len * (i + 1), subarray_len * (i + 1), subarray_len);
+    }
+    c_end = clock();
+
+    //Printing if alloweded
     if(array_len < PRINTING_LIMIT) {
         array_print(gpu_array, array_len, "After GPU sort");
     }
+
     gpu_time = working_time / 1000;
     cout << " GPU sorting time: " << gpu_time << " s" << endl;
+    
+    cpu_merge_time = (double)(c_end - c_start) / CLOCKS_PER_SEC;
+    cout << " Merging time: " << cpu_merge_time << " s" << endl;
+
 
     //CPU radix sort
-
-    //Finding maximum number
-    for(int i = 0; i < array_len; i++) {
-        if(init_array[i] > max_number) {
-            max_number = init_array[i];
-        }
-    }
-
-    //Finding maximum discharge
-    while(true) {
-        if(max_number % discharge_factor != max_number) {
-            max_discharge++;
-            discharge_factor *= 10;
-        }
-        else {
-            break;
-        }
-    }
-
     c_start = clock();
-    cpu_radix_sort(init_array, array_len, max_discharge);
+    cpu_radix_sort(init_array, array_len);
     c_end = clock();
 
     if(array_len < PRINTING_LIMIT) {
         array_print(init_array, array_len, "After CPU sort");
     }
+
     cpu_time = (double)(c_end - c_start) / CLOCKS_PER_SEC;
     cout << " CPU sorting time: " << cpu_time << " s" << endl;
 
-    file_out << array_len << ';' << gpu_time << ';' << cpu_time << ';' << endl;
+    //logging
+    file_out << array_len << ';' << gpu_time << ';' << cpu_merge_time << ';' << cpu_time << ';' << endl;
 
 cuda_error:
     file_out.close();
@@ -209,10 +249,8 @@ cuda_error:
     cudaEventDestroy(e_stop);
 
     cudaFree(d_array);
-    cudaFree(d_tmp_array);
-    cudaFree(d_b_array);
-    cudaFree(d_s_array);
-    cudaFree(d_array_len);
+
+    cudaDeviceReset();
 
     return 0;
 }
