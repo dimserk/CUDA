@@ -178,7 +178,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    cout << block_num << " " << thread_num << endl;
     // Checking ability to split data
     if (block_num == -1 || thread_num == -1 || subarray_len == -1) {
         cout << "#Error# Can not split data!" << endl;
