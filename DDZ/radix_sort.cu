@@ -116,7 +116,7 @@ int main(int argc, char** argv) {
     int const PRINTING_LIMIT = 101;
     int array_len = 50, start = 0, stop = 101;
     
-    //Obtaining command line arguments
+    // Obtaining command line arguments
     switch (argc) {
     case 1:
         cout << " #Warning# Default array size: " << array_len << endl;
@@ -153,7 +153,7 @@ int main(int argc, char** argv) {
 
     ofstream file_out("res.csv", ios_base::app);
 
-    //Randomizing array
+    // Randomizing array
     srand(time(NULL));
     for (int i = 0; i < array_len; i++) {
         init_array[i] = start + rand() % (stop - 10);
@@ -163,11 +163,11 @@ int main(int argc, char** argv) {
         array_print(init_array, array_len, "Initial array");
     }
 
-    //GPU radix sort
+    // GPU radix sort
     int *d_array;
     float working_time;
     double gpu_time, cpu_time, cpu_merge_time; 
-    int block_num, thread_num, subarray_len;
+    int block_num = -1, thread_num = -1, subarray_len = -1;
 
     // Splitting data to blocks
     for (int f = 1024; f > 0; f--) {
@@ -176,6 +176,13 @@ int main(int argc, char** argv) {
             thread_num = subarray_len = f;
             break;
         }
+    }
+
+    cout << block_num << " " << thread_num << endl;
+    // Checking ability to split data
+    if (block_num == -1 || thread_num == -1 || subarray_len == -1) {
+        cout << "#Error# Can not split data!" << endl;
+        goto cuda_error;
     }
 
     cudaEvent_t e_start, e_stop;
@@ -205,14 +212,14 @@ int main(int argc, char** argv) {
 
     cudaMemcpy(gpu_array, d_array, sizeof(int) * array_len, cudaMemcpyDeviceToHost);
 
-    //Merging sorted parts of array
+    // Merging sorted parts of array
     c_start = clock();
     for (int i = 0; i < block_num - 1; i++) {
         merge(gpu_array, gpu_array + subarray_len * (i + 1), subarray_len * (i + 1), subarray_len);
     }
     c_end = clock();
 
-    //Printing if alloweded
+    // Printing if alloweded
     if(array_len < PRINTING_LIMIT) {
         array_print(gpu_array, array_len, "After GPU sort");
     }
@@ -229,7 +236,7 @@ int main(int argc, char** argv) {
         cout << cpu_merge_time << " s" << endl;
     }
 
-    //CPU radix sort
+    // CPU radix sort
     c_start = clock();
     cpu_radix_sort(init_array, array_len);
     c_end = clock();
@@ -247,7 +254,7 @@ int main(int argc, char** argv) {
         cout << cpu_time << " s" << endl;
     }
 
-    //logging
+    // logging
     file_out << array_len << ';' << gpu_time << ';' << cpu_merge_time << ';' << cpu_time << ';' << endl;
 
 cuda_error:
